@@ -6,6 +6,12 @@ import { resolve } from "node:path";
 import assert from "node:assert/strict";
 
 const origin = "http://127.0.0.1:18082";
+// A reusable workflow's OIDC workflow_ref identifies the caller workflow.
+const workflowPrefix = `${process.env.GITHUB_REPOSITORY}/`;
+assert.ok(process.env.GITHUB_WORKFLOW_REF?.startsWith(workflowPrefix));
+const workflowPath = process.env.GITHUB_WORKFLOW_REF.slice(workflowPrefix.length).split("@")[0];
+assert.ok(workflowPath.startsWith(".github/workflows/"));
+assert.ok(process.env.GITHUB_EVENT_NAME);
 await mkdir(".dev/oidc", { recursive: true });
 const log = await open(".dev/oidc/server.log", "a");
 const child = spawn(
@@ -81,9 +87,9 @@ await request(
       key_ids: [key.id],
       repository_owner_id: process.env.OWNER_ID,
       repository_id: process.env.REPO_ID,
-      workflow_path: ".github/workflows/oidc-smoke.yml",
+      workflow_path: workflowPath,
       refs: [process.env.GITHUB_REF],
-      events: ["workflow_dispatch"],
+      events: [process.env.GITHUB_EVENT_NAME],
       runner_environments: ["github-hosted"],
     },
   },

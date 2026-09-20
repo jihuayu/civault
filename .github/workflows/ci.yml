@@ -1,16 +1,48 @@
 name: Verify
 on:
   push:
+    branches: ['**']
   pull_request:
+  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
-  cross-platform:
+  action:
+    name: Actions / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: action/package-lock.json
+      - run: npm ci
+        working-directory: action
+      - run: npm run typecheck
+        working-directory: action
+      - run: npm run build
+        working-directory: action
+      - run: npm test
+        working-directory: action
+      - run: git diff --exit-code -- action/dist
+
+  platform:
+    name: Platform API and console / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -21,7 +53,7 @@ jobs:
           cache: true
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version: '24'
           cache: npm
           cache-dependency-path: |
             web/package-lock.json
@@ -30,37 +62,86 @@ jobs:
         working-directory: web
       - run: npm run build
         working-directory: web
-      - run: node scripts/openapi.mjs --check
+      - name: Check API specification
+        run: node scripts/openapi.mjs --check
       - run: go vet ./...
-      - run: go test ./... -count=1
-      - run: npm ci
-        working-directory: action
-      - run: npm run typecheck
-        working-directory: action
-      - run: npm run build
-        working-directory: action
-      - run: npm test
-        working-directory: action
-      - run: git diff --exit-code -- action/dist
-      - run: node scripts/notices.mjs
-      - run: git diff --exit-code -- docs/THIRD_PARTY_ACTION_NOTICES.txt docs/THIRD_PARTY_WEB_NOTICES.txt
+      - name: Test backend, authorization, persistence and CLI
+        run: go test ./... -count=1
       - name: Race detector
         if: runner.os == 'Linux'
         run: go test -race ./internal/...
-      - name: Build browser-test server
-        if: runner.os == 'Linux'
-        run: go build -o bin/civault-server ./cmd/civault-server
+      - name: Build server and CLI
+        shell: bash
+        run: |
+          mkdir -p bin
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=.exe; else suffix=; fi
+          go build -o "bin/civault-server$suffix" ./cmd/civault-server
+          go build -o "bin/civault$suffix" ./cmd/civault
       - name: Install Chromium
-        if: runner.os == 'Linux'
         run: npx playwright install --with-deps chromium
         working-directory: web
       - name: Test production console with real API
-        if: runner.os == 'Linux'
         run: npm run test:e2e
         working-directory: web
-      - name: Build Docker image
-        if: runner.os == 'Linux'
-        run: docker build -t civault:ci .
-      - name: Test container persistence and backup
-        if: runner.os == 'Linux'
+      - name: Upload browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-failure-${{ matrix.os }}
+          path: |
+            web/test-results/
+            web/playwright-report/
+          retention-days: 7
+      - run: npm ci
+        working-directory: action
+      - name: Verify third-party notices
+        run: |
+          node scripts/notices.mjs
+          git diff --exit-code -- docs/THIRD_PARTY_ACTION_NOTICES.txt docs/THIRD_PARTY_WEB_NOTICES.txt
+
+  docker:
+    name: Docker lifecycle / ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: amd64
+          - os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24'
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: civault:ci
+          cache-from: type=gha,scope=docker-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=docker-${{ matrix.arch }}
+      - name: Test container restart, persistence, wrong key and backup restore
         run: node scripts/docker-smoke.mjs
+
+  oidc:
+    name: Real GitHub OIDC
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/oidc-smoke.yml
+
+  publish-edge:
+    name: Publish tested development image
+    needs: [action, platform, docker, oidc]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-publish.yml

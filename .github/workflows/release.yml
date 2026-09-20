@@ -1,0 +1,66 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Validate version tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo 'Expected vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease' >&2
+            exit 1
+          fi
+          if [[ "$TAG" == *-* ]]; then prerelease=true; else prerelease=false; fi
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+  verify:
+    needs: version
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/ci.yml
+  image:
+    needs: verify
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker-publish.yml
+  release:
+    needs: [version, image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub release after the image is published
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          DIGEST: ${{ needs.image.outputs.digest }}
+        shell: bash
+        run: |
+          image="ghcr.io/${GH_REPO,,}"
+          version="${TAG#v}"
+          printf 'Docker image: `%s:%s`\n\nImmutable image: `%s@%s`\n\nPlatforms: `linux/amd64`, `linux/arm64`.\n' "$image" "$version" "$image" "$DIGEST" > release-notes.md
+          args=(--repo "$GH_REPO" --verify-tag --title "CIVault $TAG" --notes-file release-notes.md --generate-notes)
+          if [[ "$PRERELEASE" == true ]]; then args+=(--prerelease --latest=false); fi
+          if gh release view "$TAG" --repo "$GH_REPO" > /dev/null 2>&1; then
+            echo "Release $TAG already exists; leaving its notes unchanged."
+          else
+            gh release create "$TAG" "${args[@]}"
+          fi

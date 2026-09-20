@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 
@@ -9,12 +9,22 @@ const volume = `${name}-data`,
   restoredVolume = `${name}-restore-data`;
 const master = randomBytes(32).toString("base64");
 const env = { ...process.env, CIVAULT_MASTER_KEY: master };
+const image = process.env.CIVAULT_TEST_IMAGE || "civault:ci";
+function logsFor(container) {
+  const result = spawnSync("docker", ["logs", container], {
+    encoding: "utf8", windowsHide: true, timeout: 10_000,
+  });
+  if (result.error) throw result.error;
+  assert.equal(result.status, 0, "Could not read container logs");
+  return result.stdout + result.stderr;
+}
 function docker(args, customEnv = env) {
   return execFileSync("docker", args, {
     env: customEnv,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
+    timeout: 120_000,
   }).trim();
 }
 function start(container, dataVolume) {
@@ -36,8 +46,11 @@ function start(container, dataVolume) {
     `${dataVolume}:/data`,
     "-p",
     "127.0.0.1::8080",
-    "civault:ci",
+    image,
   ]);
+  return originFor(container);
+}
+function originFor(container) {
   return `http://${docker(["port", container, "8080/tcp"]).split("\n")[0]}`;
 }
 async function healthy(origin) {
@@ -61,8 +74,11 @@ async function healthy(origin) {
 try {
   docker(["volume", "create", volume]);
   docker(["volume", "create", restoredVolume]);
-  const origin = start(name, volume);
+  let origin = start(name, volume);
   await healthy(origin);
+  assert.equal(docker(["exec", name, "id", "-u"]), "10001");
+  assert.match(await (await fetch(origin + "/")).text(), /<html/i);
+  assert.equal((await fetch(origin + "/v1/admin/workspaces")).status, 401);
   const code = docker(["exec", name, "cat", "/data/setup-token"]);
   async function request(url, path, method = "GET", body, headers = {}) {
     const r = await fetch(url + path, {
@@ -97,6 +113,10 @@ try {
     headers,
   );
   docker(["restart", name]);
+  // Docker may assign a different ephemeral host port when restarting.
+  const previousOrigin = origin;
+  origin = originFor(name);
+  console.log(`Container restart address: ${previousOrigin} -> ${origin}`);
   await healthy(origin);
   assert.equal(
     (
@@ -114,7 +134,7 @@ try {
   );
   assert.throws(() => docker(["exec", name, "cat", "/data/setup-token"]));
   docker(["exec", name, "civault-server", "-backup", "/data/backup.db"]);
-  const logs = docker(["logs", name]);
+  const logs = logsFor(name);
   for (const sensitive of [
     master,
     code,
@@ -137,10 +157,12 @@ try {
         "CIVAULT_MASTER_KEY",
         "-v",
         `${volume}:/data`,
-        "civault:ci",
+        image,
       ],
       { ...env, CIVAULT_MASTER_KEY: randomBytes(32).toString("base64") },
     ),
+    (error) => error.status === 1 &&
+      String(error.stderr).includes("master key does not match database"),
   );
   // Restore only into a newly created test volume. The source is mounted read-only.
   docker([
@@ -154,7 +176,7 @@ try {
     `${volume}:/source:ro`,
     "-v",
     `${restoredVolume}:/data`,
-    "civault:ci",
+    image,
     "-c",
     "cp /source/backup.db /data/civault.db && chown 10001:10001 /data/civault.db && chmod 600 /data/civault.db",
   ]);
@@ -177,6 +199,15 @@ try {
   console.log(
     "Container restart, encrypted persistence, wrong-master rejection and backup/restore passed.",
   );
+} catch (error) {
+  // Only synthetic test containers are inspected; never dump Config.Env.
+  for (const container of [name, restored]) {
+    try {
+      console.error(docker(["inspect", "--format", "{{json .State}}", container]));
+      console.error(logsFor(container).replaceAll(master, "[REDACTED]"));
+    } catch { /* The container may not have been created. */ }
+  }
+  throw error;
 } finally {
   // All names above are task-specific constants containing a fresh random suffix.
   for (const container of [name, restored]) {

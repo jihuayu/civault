@@ -252,7 +252,31 @@ npm run test:e2e
 
 浏览器测试启动独立临时 Go 服务，使用真实 SQLite、密码登录和管理接口。Action 测试实际运行打包后的代码并检查 GitHub 输出文件、掩码、多行值、HTTP 重试、exec 退出码和取消。Windows 取消测试通过测试专用 IPC 桥触发 Node 信号处理器，再运行实际 `taskkill`；Unix 使用真实 SIGTERM。
 
-`.github/workflows/ci.yml` 提供 Linux、Windows、macOS 矩阵，并在 Linux 检查 race、浏览器和 Docker 持久化/恢复。另有手动触发的 `Real GitHub OIDC acceptance` 工作流，使用 GitHub 实际签发的 JWT 和官方 JWKS，在三个平台验证两个 Action；只创建临时合成 Key，无认证绕过。
+`.github/workflows/ci.yml` 将验证拆成独立任务：
+
+- **Actions**：Linux、Windows、macOS 上进行类型检查、打包一致性和进程/HTTP 测试。
+- **Platform API and console**：三个平台均执行 Go 测试、`go vet`、服务端/CLI 构建和 Playwright 真实控制台全流程；Linux 额外运行 race detector。浏览器失败时上传诊断文件，保留 7 天。
+- **Docker lifecycle**：在原生 amd64、arm64 Runner 上分别构建镜像，验证非 root 用户、控制台资源、未登录访问拒绝、容器重启、持久化、错误主密钥拒绝与备份恢复。
+- **Real GitHub OIDC**：分支推送和发版时自动在三个平台使用 GitHub 实际签发的 JWT 和官方 JWKS 验证两个 Action；PR 不申请 OIDC 权限。也可手动运行 `Real GitHub OIDC acceptance`。只创建临时合成 Key，无认证绕过。
+
+## Docker 镜像与发版
+
+镜像发布到 `ghcr.io/jihuayu/civault`，包含 `linux/amd64` 与 `linux/arm64`，使用 GitHub 自带的 `GITHUB_TOKEN`，无需配置 Docker Hub 凭证。
+
+| 触发条件 | 产物 |
+| --- | --- |
+| 推送 `main`，全部测试通过 | `edge`、`sha-<完整提交 SHA>` 开发镜像 |
+| 推送 `v1.2.3` 形式的版本标签，全部测试通过 | `1.2.3`、`1.2`、`latest`、SHA 镜像，以及 GitHub Release |
+| 推送 `v1.2.3-rc.1` 形式的预发布标签 | `1.2.3-rc.1`、SHA 镜像，以及 GitHub Pre-release；不更新 `latest` |
+
+版本发布会重新执行整套验证，再发布带有来源证明和 SBOM 的镜像，最后创建包含镜像 digest 的 GitHub Release。创建标签时应使用维护者的本地 Git 凭证或 PAT；由其他工作流的 `GITHUB_TOKEN` 推送的标签不会自动触发下一条工作流。示例（将版本号替换为本次实际版本）：
+
+```bash
+git tag -a v1.2.3 -m "CIVault v1.2.3"
+git push origin v1.2.3
+```
+
+开发镜像可以通过 `docker pull ghcr.io/jihuayu/civault:edge` 获取。生产部署建议选择已发布的版本或固定 `@sha256:...` digest。GHCR 包首次创建后如默认是私有，需要在 GitHub 的 Package settings 中将其设为 Public，才能匿名拉取。
 
 更多说明：[部署、备份与恢复](docs/operations.md) · [安全模型与内部结构](docs/design.md) · [本地验证记录](docs/verification.md)。
 
