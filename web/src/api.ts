@@ -119,6 +119,9 @@ export interface Settings {
   github_client_id: string;
   github_secret_configured: boolean;
   github_id: string;
+  email_provider: "resend" | "agentmail";
+  agentmail_inbox_id: string;
+  agentmail_key_configured: boolean;
   resend_enabled: boolean;
   resend_from: string;
   resend_key_configured: boolean;

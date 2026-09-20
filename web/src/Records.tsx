@@ -244,7 +244,7 @@ export function NotificationsPage() {
       </PageTitle>
       {settings.data && !settings.data.resend_enabled ? (
         <Notice>
-          邮件通知未启用。前往 <a href="#settings">系统设置</a> 配置 Resend；Key
+          邮件通知未启用。前往 <a href="#settings">系统设置</a> 配置邮件发送商；Key
           到期后仍会停止发放。
         </Notice>
       ) : null}

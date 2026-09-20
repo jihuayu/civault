@@ -156,6 +156,59 @@ test("Owner manages keys, policies, settings and tokens through the real Go serv
         .github_secret_configured,
     ).toBe(true);
   });
+  await test.step("email providers retain independent encrypted configuration", async () => {
+    await page.getByRole("link", { name: "系统设置", exact: true }).click();
+    await expect(page.getByLabel("邮件发送商")).toHaveValue("resend");
+    await page.getByLabel("Resend API Key 操作").selectOption("replace");
+    await page
+      .getByLabel("Resend API Key 新值")
+      .fill("synthetic-resend-credential");
+    await page.getByLabel("发件地址").fill("alerts@example.com");
+    await page.getByLabel("邮件发送商").selectOption("agentmail");
+    await page.getByLabel("AgentMail API Key 操作").selectOption("replace");
+    await page
+      .getByLabel("AgentMail API Key 新值")
+      .fill("synthetic-agentmail-credential");
+    await page.getByLabel("AgentMail Inbox ID").fill("alerts@agentmail.to");
+    await page.getByRole("button", { name: "保存系统设置" }).click();
+    await expect(page.getByLabel("AgentMail API Key 操作")).toHaveValue("keep");
+    await page.reload();
+    await expect(page.getByLabel("邮件发送商")).toHaveValue("agentmail");
+    await expect(page.getByLabel("AgentMail Inbox ID")).toHaveValue(
+      "alerts@agentmail.to",
+    );
+    const config = await context.request.get("/v1/admin/settings");
+    expect(await config.text()).not.toContain("synthetic-agentmail-credential");
+    expect(await config.text()).not.toContain("synthetic-resend-credential");
+    expect((await config.json()).agentmail_key_configured).toBe(true);
+    expect((await config.json()).resend_key_configured).toBe(true);
+    await page.screenshot({
+      path: "test-results/email-settings.png",
+      fullPage: true,
+    });
+    await page.getByLabel("邮件发送商").selectOption("resend");
+    await expect(page.getByLabel("发件地址")).toHaveValue("alerts@example.com");
+    const saved = page.waitForResponse(
+      (r) =>
+        r.url().endsWith("/v1/admin/settings") &&
+        r.request().method() === "PUT",
+    );
+    await page.getByRole("button", { name: "保存系统设置" }).click();
+    expect((await saved).status()).toBe(200);
+    await page.reload();
+    await expect(page.getByLabel("邮件发送商")).toHaveValue("resend");
+    await page.getByLabel("邮件发送商").selectOption("agentmail");
+    await expect(page.getByLabel("AgentMail Inbox ID")).toHaveValue(
+      "alerts@agentmail.to",
+    );
+    await page.getByLabel("AgentMail API Key 操作").selectOption("clear");
+    await page.getByRole("button", { name: "保存系统设置" }).click();
+    await expect(page.getByLabel("AgentMail API Key 操作")).toHaveValue("keep");
+    expect(
+      (await (await context.request.get("/v1/admin/settings")).json())
+        .agentmail_key_configured,
+    ).toBe(false);
+  });
   await test.step("one-time token, HTTP administration and immediate revocation", async () => {
     await page.getByRole("link", { name: "CLI 令牌", exact: true }).click();
     await page.getByRole("button", { name: "创建令牌", exact: true }).click();

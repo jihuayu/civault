@@ -11,6 +11,8 @@ import (
 )
 
 type Settings struct {
+	EmailProvider      string `json:"email_provider"`
+	AgentMailInboxID   string `json:"agentmail_inbox_id"`
 	PublicURL          string `json:"public_url"`
 	OwnerEmail         string `json:"owner_email"`
 	GithubEnabled      bool   `json:"github_enabled"`
@@ -23,6 +25,7 @@ type Settings struct {
 	AuditRetentionDays int    `json:"audit_retention_days"`
 }
 type SettingsView struct {
+	AgentMailKeyConfigured bool `json:"agentmail_key_configured"`
 	Settings
 	Revision               int    `json:"revision"`
 	GithubSecretConfigured bool   `json:"github_secret_configured"`
@@ -30,6 +33,8 @@ type SettingsView struct {
 	GithubID               string `json:"github_id"`
 }
 type SettingsUpdate struct {
+	AgentMailKey      *string `json:"agentmail_key,omitempty"`
+	ClearAgentMailKey bool    `json:"clear_agentmail_key"`
 	Settings
 	Revision          int     `json:"revision"`
 	GithubSecret      *string `json:"github_secret,omitempty"`
@@ -106,7 +111,27 @@ func validEnv(s string) bool {
 	u := strings.ToUpper(s)
 	return len(s) <= 200 && envName.MatchString(s) && !strings.HasPrefix(u, "GITHUB_") && !strings.HasPrefix(u, "RUNNER_") && !strings.HasPrefix(u, "ACTIONS_") && !slices.Contains([]string{"__PROTO__", "CONSTRUCTOR", "PROTOTYPE", "NODE_OPTIONS", "PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "ENV", "COMSPEC", "SHELLOPTS"}, u)
 }
+func (s Settings) emailProvider() string {
+	if s.EmailProvider == "" {
+		return "resend"
+	}
+	return s.EmailProvider
+}
+func (s Settings) emailSecretName() string { return s.emailProvider() + "_key" }
+func (s Settings) emailSender() string {
+	if s.emailProvider() == "agentmail" {
+		return s.AgentMailInboxID
+	}
+	return s.ResendFrom
+}
 func validateSettings(s Settings) error {
+	if !slices.Contains([]string{"resend", "agentmail"}, s.emailProvider()) {
+		return errors.New("invalid email provider")
+	}
+	if s.AgentMailInboxID != "" && (!validName(s.AgentMailInboxID) || strings.ContainsAny(s.AgentMailInboxID, "/\\?#") || s.AgentMailInboxID == "." || s.AgentMailInboxID == "..") {
+		return errors.New("invalid AgentMail inbox ID")
+	}
+
 	u, e := url.Parse(s.PublicURL)
 	if e != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" && u.Path != "/" || u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" || u.Hostname() == "::1")) {
 		return errors.New("public_url must be an HTTPS origin (HTTP is allowed on loopback only)")

@@ -47,6 +47,10 @@ function SettingsForm({
   const [s, setS] = useState(initial);
   const [gh, setGH] = useState<SecretEdit>({ mode: "keep", value: "" });
   const [resend, setResend] = useState<SecretEdit>({ mode: "keep", value: "" });
+  const [agentmail, setAgentMail] = useState<SecretEdit>({
+    mode: "keep",
+    value: "",
+  });
   const [days, setDays] = useState(initial.reminder_days.join(", "));
   const [test, setTest] = useState("");
   const [testError, setTestError] = useState("");
@@ -63,6 +67,7 @@ function SettingsForm({
               github_id: _id,
               github_secret_configured: _gh,
               resend_key_configured: _re,
+              agentmail_key_configured: _am,
               ...body
             } = s;
             const payload = {
@@ -75,6 +80,11 @@ function SettingsForm({
                 : gh.mode === "clear"
                   ? { clear_github_secret: true }
                   : {}),
+              ...(agentmail.mode === "replace"
+                ? { agentmail_key: agentmail.value }
+                : agentmail.mode === "clear"
+                  ? { clear_agentmail_key: true }
+                  : {}),
               ...(resend.mode === "replace"
                 ? { resend_key: resend.value }
                 : resend.mode === "clear"
@@ -84,6 +94,7 @@ function SettingsForm({
             await api("/v1/admin/settings", "PUT", payload);
             setGH({ mode: "keep", value: "" });
             setResend({ mode: "keep", value: "" });
+            setAgentMail({ mode: "keep", value: "" });
             reload();
           }}
         >
@@ -172,7 +183,7 @@ function SettingsForm({
             <div className="settings-heading">
               <h2>
                 <Mail size={19} />
-                Resend 邮件通知
+                邮件通知
               </h2>
               <label className="check">
                 <input
@@ -185,22 +196,62 @@ function SettingsForm({
             </div>
             {!initial.resend_enabled ? (
               <Notice>
-                邮件通知尚未启用。配置并保存 Resend 后，服务会开始检查到期提醒。
+                邮件通知尚未启用。配置并保存邮件发送商后，服务会开始检查到期提醒。
               </Notice>
             ) : null}
-            <SecretField
-              label="Resend API Key"
-              configured={initial.resend_key_configured}
-              value={resend}
-              setValue={setResend}
-            />
-            <Field label="发件地址" hint="必须使用 Resend 已验证的域名。">
-              <input
-                value={s.resend_from}
-                onChange={(e) => set("resend_from", e.target.value)}
-                placeholder="CIVault <alerts@example.com>"
-              />
+            <Field
+              label="邮件发送商"
+              hint="保存后，测试邮件和到期提醒使用所选发送商。切换会保留各发送商的配置。"
+            >
+              <select
+                value={s.email_provider}
+                onChange={(e) =>
+                  set(
+                    "email_provider",
+                    e.target.value as Settings["email_provider"],
+                  )
+                }
+              >
+                <option value="resend">Resend</option>
+                <option value="agentmail">AgentMail (agentmail.to)</option>
+              </select>
             </Field>
+            {s.email_provider === "agentmail" ? (
+              <>
+                <SecretField
+                  label="AgentMail API Key"
+                  configured={initial.agentmail_key_configured}
+                  value={agentmail}
+                  setValue={setAgentMail}
+                />
+                <Field
+                  label="AgentMail Inbox ID"
+                  hint="填写已创建的 AgentMail 邮箱 ID，例如 alerts@agentmail.to。"
+                >
+                  <input
+                    value={s.agentmail_inbox_id}
+                    onChange={(e) => set("agentmail_inbox_id", e.target.value)}
+                    placeholder="alerts@agentmail.to"
+                  />
+                </Field>
+              </>
+            ) : (
+              <>
+                <SecretField
+                  label="Resend API Key"
+                  configured={initial.resend_key_configured}
+                  value={resend}
+                  setValue={setResend}
+                />
+                <Field label="发件地址" hint="必须使用 Resend 已验证的域名。">
+                  <input
+                    value={s.resend_from}
+                    onChange={(e) => set("resend_from", e.target.value)}
+                    placeholder="CIVault <alerts@example.com>"
+                  />
+                </Field>
+              </>
+            )}
             <Field
               label="提前提醒天数"
               hint="默认提前 7、3、1 天各提醒一次；多个天数用逗号分隔。"
@@ -279,7 +330,7 @@ function SettingsForm({
         <div className="panel">
           <CheckCircle2 size={23} />
           <h3>加密保存配置</h3>
-          <p>OAuth Secret 和 Resend API Key 由主密钥保护，保存后不再回显。</p>
+          <p>OAuth Secret 和邮件服务 API Key 由主密钥保护，保存后不再回显。</p>
           <p>
             保持不变不会重写凭证。只有明确选择“替换”或“清除”才会修改敏感字段。
           </p>

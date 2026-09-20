@@ -356,7 +356,7 @@ func New(in io.Reader, out, errOut io.Writer) *cobra.Command {
 		if e = json.Unmarshal(b, &v); e != nil {
 			return e
 		}
-		for _, k := range []string{"github_id", "github_secret_configured", "resend_key_configured"} {
+		for _, k := range []string{"github_id", "github_secret_configured", "resend_key_configured", "agentmail_key_configured"} {
 			delete(v, k)
 		}
 		return c.run("PUT", "/v1/admin/settings", v)

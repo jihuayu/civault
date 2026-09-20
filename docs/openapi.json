@@ -2054,8 +2054,21 @@
           "github_client_id": {
             "type": "string"
           },
+          "email_provider": {
+            "type": "string",
+            "enum": [
+              "resend",
+              "agentmail"
+            ],
+            "default": "resend"
+          },
+          "agentmail_inbox_id": {
+            "type": "string",
+            "description": "Existing AgentMail inbox ID."
+          },
           "resend_enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Email notifications enabled for the selected provider; legacy field name retained for compatibility."
           },
           "resend_from": {
             "type": "string",
@@ -2103,6 +2116,9 @@
           "resend_key_configured": {
             "type": "boolean"
           },
+          "agentmail_key_configured": {
+            "type": "boolean"
+          },
           "github_id": {
             "type": "string"
           }
@@ -2112,6 +2128,8 @@
           "owner_email",
           "github_enabled",
           "github_client_id",
+          "email_provider",
+          "agentmail_inbox_id",
           "resend_enabled",
           "resend_from",
           "reminder_days",
@@ -2121,6 +2139,7 @@
           "revision",
           "github_secret_configured",
           "resend_key_configured",
+          "agentmail_key_configured",
           "github_id"
         ]
       },
@@ -2142,8 +2161,21 @@
           "github_client_id": {
             "type": "string"
           },
+          "email_provider": {
+            "type": "string",
+            "enum": [
+              "resend",
+              "agentmail"
+            ],
+            "default": "resend"
+          },
+          "agentmail_inbox_id": {
+            "type": "string",
+            "description": "Existing AgentMail inbox ID."
+          },
           "resend_enabled": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Email notifications enabled for the selected provider; legacy field name retained for compatibility."
           },
           "resend_from": {
             "type": "string",
@@ -2199,6 +2231,14 @@
             "type": "boolean"
           },
           "clear_resend_key": {
+            "type": "boolean"
+          },
+          "agentmail_key": {
+            "type": "string",
+            "description": "Omit to preserve.",
+            "writeOnly": true
+          },
+          "clear_agentmail_key": {
             "type": "boolean"
           }
         },

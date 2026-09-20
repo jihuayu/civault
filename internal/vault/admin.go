@@ -33,12 +33,12 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) error {
 	if e := validateSettings(in.Settings); e != nil {
 		return bad(e.Error())
 	}
-	for _, v := range []*string{in.GithubSecret, in.ResendKey} {
+	for _, v := range []*string{in.GithubSecret, in.ResendKey, in.AgentMailKey} {
 		if v != nil && (*v == "" || len(*v) > 4096 || strings.TrimSpace(*v) != *v || strings.ContainsAny(*v, "\x00\r\n") || strings.Contains(*v, "***") || strings.Contains(*v, "•••")) {
 			return bad("secret replacement must be nonempty and must not be a mask; use explicit clear instead")
 		}
 	}
-	if in.ClearGithubSecret && in.GithubSecret != nil || in.ClearResendKey && in.ResendKey != nil {
+	if in.ClearGithubSecret && in.GithubSecret != nil || in.ClearResendKey && in.ResendKey != nil || in.ClearAgentMailKey && in.AgentMailKey != nil {
 		return bad("cannot replace and clear the same secret")
 	}
 	a.settingsMu.Lock()
@@ -56,15 +56,20 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) error {
 		if in.GithubEnabled && (!gh || in.GithubClientID == "") {
 			return bad("GitHub login requires client ID and secret")
 		}
-		if in.ResendEnabled && (!re || in.ResendFrom == "") {
+		if in.ResendEnabled && in.emailProvider() == "resend" && (!re || in.ResendFrom == "") {
 			return bad("Resend requires API key and sender")
 		}
+		am := (old.AgentMailKeyConfigured && !in.ClearAgentMailKey) || in.AgentMailKey != nil
+		if in.ResendEnabled && in.emailProvider() == "agentmail" && (!am || in.AgentMailInboxID == "") {
+			return bad("AgentMail requires API key and inbox ID")
+		}
+		in.EmailProvider = in.emailProvider()
 		next := old.Revision + 1
 		for _, x := range []struct {
 			name  string
 			value *string
 			clear bool
-		}{{"github_secret", in.GithubSecret, in.ClearGithubSecret}, {"resend_key", in.ResendKey, in.ClearResendKey}} {
+		}{{"github_secret", in.GithubSecret, in.ClearGithubSecret}, {"resend_key", in.ResendKey, in.ClearResendKey}, {"agentmail_key", in.AgentMailKey, in.ClearAgentMailKey}} {
 			if x.value != nil || x.clear {
 				var blob []byte
 				if x.value != nil {
@@ -107,6 +112,13 @@ func (a *App) putSettings(w http.ResponseWriter, r *http.Request) error {
 			operations["resend_key"] = "replace"
 			if in.ClearResendKey {
 				operations["resend_key"] = "clear"
+			}
+		}
+		if in.AgentMailKey != nil || in.ClearAgentMailKey {
+			fields = append(fields, "agentmail_key")
+			operations["agentmail_key"] = "replace"
+			if in.ClearAgentMailKey {
+				operations["agentmail_key"] = "clear"
 			}
 		}
 		slices.Sort(fields)

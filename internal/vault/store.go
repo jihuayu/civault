@@ -30,6 +30,9 @@ import (
 //go:embed migrations/001_init.sql
 var schema string
 
+//go:embed migrations/002_email_providers.sql
+var emailProviderSchema string
+
 type App struct {
 	db         *sql.DB
 	box        *cryptobox.Box
@@ -95,7 +98,7 @@ func Open(dataDir, master string, assets fs.FS, logOutput io.Writer) (*App, erro
 		if e = db.QueryRow("SELECT COALESCE(max(version),0) FROM schema_migrations").Scan(&current); e != nil {
 			return nil, e
 		}
-		if current > 1 {
+		if current > 2 {
 			return nil, errors.New("database schema is newer than this server; refusing downgrade")
 		}
 	}
@@ -107,11 +110,22 @@ func Open(dataDir, master string, assets fs.FS, logOutput io.Writer) (*App, erro
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("database migration failed: %w", e)
 	}
+	var current int
+	if e = tx.QueryRow("SELECT COALESCE(max(version),0) FROM schema_migrations").Scan(&current); e != nil {
+		_ = tx.Rollback()
+		return nil, e
+	}
+	if current < 2 {
+		if _, e = tx.Exec(emailProviderSchema); e != nil {
+			_ = tx.Rollback()
+			return nil, fmt.Errorf("email provider migration failed: %w", e)
+		}
+	}
 	if e = tx.Commit(); e != nil {
 		return nil, e
 	}
 	var migration int
-	if e = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&migration); e != nil || migration != 1 {
+	if e = db.QueryRow("SELECT max(version) FROM schema_migrations").Scan(&migration); e != nil || migration != 2 {
 		return nil, errors.New("unsupported database schema")
 	}
 	_ = os.Chmod(abs, 0600)
@@ -176,15 +190,16 @@ func (a *App) initialized(ctx context.Context) bool {
 func (a *App) settings(ctx context.Context, q queryer) (SettingsView, error) {
 	var v SettingsView
 	var data string
-	e := q.QueryRowContext(ctx, "SELECT s.revision,s.data,s.github_secret IS NOT NULL,s.resend_key IS NOT NULL,o.github_id FROM settings s JOIN owner o ON o.id=s.id WHERE s.id=1").Scan(&v.Revision, &data, &v.GithubSecretConfigured, &v.ResendKeyConfigured, &v.GithubID)
+	e := q.QueryRowContext(ctx, "SELECT s.revision,s.data,s.github_secret IS NOT NULL,s.resend_key IS NOT NULL,s.agentmail_key IS NOT NULL,o.github_id FROM settings s JOIN owner o ON o.id=s.id WHERE s.id=1").Scan(&v.Revision, &data, &v.GithubSecretConfigured, &v.ResendKeyConfigured, &v.AgentMailKeyConfigured, &v.GithubID)
 	if e != nil {
 		return v, e
 	}
 	e = json.Unmarshal([]byte(data), &v.Settings)
+	v.EmailProvider = v.emailProvider()
 	return v, e
 }
 func (a *App) configSecret(ctx context.Context, q queryer, name string) (string, error) {
-	if name != "github_secret" && name != "resend_key" {
+	if name != "github_secret" && name != "resend_key" && name != "agentmail_key" {
 		return "", errors.New("unknown secret field")
 	}
 	var b []byte

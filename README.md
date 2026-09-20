@@ -8,7 +8,7 @@
 
 基于 GitHub Actions OIDC 的 CI Secrets Manager。Go + SQLite 单服务，内嵌中文 React / TypeScript 控制台，附带 HTTP CLI、加载型 Action 和 exec Action。
 
-服务器只有一个必须提供的环境变量：`CIVAULT_MASTER_KEY`。Owner、GitHub OAuth、Resend、到期提醒、站点 URL 和日志设置均在页面维护。没有 Bundle、Redis、云 KMS 或独立 Worker。
+服务器只有一个必须提供的环境变量：`CIVAULT_MASTER_KEY`。Owner、GitHub OAuth、邮件发送商、到期提醒、站点 URL 和日志设置均在页面维护。没有 Bundle、Redis、云 KMS 或独立 Worker。
 
 ![CIVault 中文控制台，展示合成测试数据](docs/screenshots/console.png)
 
@@ -41,7 +41,7 @@
    ```
 
 3. 打开 `http://127.0.0.1:8080/setup`，或经过 HTTPS 入口打开 `/setup`。填写初始化码、Owner 邮箱、至少 12 字节的密码和最终站点 URL。正式使用时站点 URL 必须为 HTTPS origin，例如 `https://secrets.example.com`，不含子路径。
-4. 登录后进入「系统设置」，配置 GitHub OAuth、Resend 和提醒策略。
+4. 登录后进入「系统设置」，配置 GitHub OAuth、邮件发送商 和提醒策略。
 
 默认仅将容器 8080 映射到宿主机 loopback，数据库保存在命名卷 `civault-data` 的 `/data/civault.db`。容器以 UID/GID `10001` 运行，根文件系统只读。若使用宿主机目录代替命名卷，需要赋予该 UID 数据目录的读写权限。
 
@@ -59,7 +59,7 @@
 | 审计日志 | 事件、时间、仓库和决策筛选；分页及 JSON 导出                                     |
 | 通知记录 | 待发送、重试、已发送、已取消、失败及结果未知状态                                 |
 | CLI 令牌 | 默认 30 天、只显示一次、即时撤销                                                 |
-| 系统设置 | 站点、Owner、OAuth、Resend 测试邮件、提醒、日志、账户密码                        |
+| 系统设置 | 站点、Owner、OAuth、邮件发送商及测试邮件、提醒、日志、账户密码                        |
 
 Key 明文仅在写入表单中输入，保存后管理页面和管理 API 均不再返回。敏感配置显示「已配置 / 未配置」；保持不变、替换和清除是明确的不同操作。空值或掩码不能当作新凭证保存。配置使用 `revision` 并发检查；另一页面保存后，旧页面会收到冲突提示，需要刷新后重新编辑。
 
@@ -75,11 +75,17 @@ https://secrets.example.com/v1/auth/github/callback
 
 系统使用 Authorization Code、state、S256 PKCE；请求 `read:user user:email`。GitHub Access Token 只在本次登录校验中使用，不持久化，也不能当作管理令牌。没有开放注册。Web 会话 8 小时；修改本地密码会撤销所有 Web 会话和 CLI 管理令牌。
 
-### Resend
+### 邮件发送商（Resend / AgentMail）
 
-在 Resend 验证发件域名后，将 API Key 和发件地址填入设置，例如 `CIVault <alerts@example.com>`，启用并保存，再点击「发送测试邮件」。测试邮件和到期通知仅发送给保存的 Owner 邮箱。
+在系统设置中选择邮件发送商。两家的 API Key 分别加密保存，切换时保留原配置；启用开关、提醒策略和收件人共用。升级后现有配置默认继续使用 Resend。
 
-默认提前 7、3、1 天以及到期时提醒。每分钟检查一次；停机错过多个档位时只补当前最紧急的一档。邮件只包含 Key 路径、Workspace、版本、到期时间和控制台链接。未启用 Resend 时，控制台仍显示到期状态，Runtime 仍会拒绝过期 Key。
+选择 Resend：在 Resend 验证发件域名后，将 API Key 和发件地址填入设置，例如 `CIVault <alerts@example.com>`，启用并保存，再点击「发送测试邮件」。测试邮件和到期通知仅发送给保存的 Owner 邮箱。
+
+选择 AgentMail：在 [agentmail.to](https://agentmail.to) 创建 Inbox，将 API Key 和 Inbox ID（例如 `alerts@agentmail.to`）填入设置，启用并保存，再发送测试邮件。接口按 [AgentMail 发送文档](https://docs.agentmail.to/api-reference/inboxes/messages/send) 接入。
+
+API 为兼容旧客户端保留 `resend_enabled` 作为通用邮件启用开关；`email_provider` 选择 `resend`（默认）或 `agentmail`，AgentMail 使用 `agentmail_key` 和 `agentmail_inbox_id`。
+
+默认提前 7、3、1 天以及到期时提醒。每分钟检查一次；停机错过多个档位时只补当前最紧急的一档。邮件只包含 Key 路径、Workspace、版本、到期时间和控制台链接。未启用邮件通知时，控制台仍显示到期状态，Runtime 仍会拒绝过期 Key。
 
 到期、禁用和删除只阻止后续发放；不能收回已进入 Runner 的值，也不会撤销第三方 Token。
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -53,7 +54,7 @@ func (a *App) notifications(w http.ResponseWriter, r *http.Request) error {
 }
 
 type emailPayload struct {
-	From    string   `json:"from"`
+	From    string   `json:"from,omitempty"`
 	To      []string `json:"to"`
 	Subject string   `json:"subject"`
 	Text    string   `json:"text"`
@@ -125,7 +126,7 @@ func (a *App) scheduleNotifications(ctx context.Context) error {
 			if due == 0 {
 				subject = "[CIVault] Key 已到期：" + item.Path
 			}
-			payload := emailPayload{From: s.ResendFrom, To: []string{s.OwnerEmail}, Subject: subject, Text: fmt.Sprintf("Key: %s\nWorkspace: %s\nVersion: %s\nExpires at: %s\n\n管理密钥：%s/#keys\n\n请更新第三方凭证，并创建新的 Key 版本。此邮件不包含凭证值。", item.Path, item.Workspace, item.Version, time.Unix(item.Expiry, 0).UTC().Format(time.RFC3339), s.PublicURL)}
+			payload := emailPayload{From: s.emailSender(), To: []string{s.OwnerEmail}, Subject: subject, Text: fmt.Sprintf("Key: %s\nWorkspace: %s\nVersion: %s\nExpires at: %s\n\n管理密钥：%s/#keys\n\n请更新第三方凭证，并创建新的 Key 版本。此邮件不包含凭证值。", item.Path, item.Workspace, item.Version, time.Unix(item.Expiry, 0).UTC().Format(time.RFC3339), s.PublicURL)}
 			_, e = tx.ExecContext(ctx, `INSERT INTO notifications(id,version_id,expiry_revision,threshold,settings_revision,status,payload,next_attempt_at,created_at) VALUES(?,?,?,?,?,'pending',?,?,?) ON CONFLICT(version_id,expiry_revision,threshold) DO UPDATE SET status='pending',payload=excluded.payload,settings_revision=excluded.settings_revision,next_attempt_at=excluded.next_attempt_at,last_error='' WHERE notifications.status='cancelled' AND notifications.attempts=0`, newID("mail"), item.Version, item.Revision, due, s.Revision, jsonText(payload), now, now)
 			if e != nil {
 				return e
@@ -142,14 +143,30 @@ type sendResult struct {
 	Delay time.Duration
 }
 
-func (a *App) sendEmail(ctx context.Context, key, payload, id string) sendResult {
-	req, e := http.NewRequestWithContext(ctx, "POST", "https://api.resend.com/emails", strings.NewReader(payload))
+func (a *App) sendEmail(ctx context.Context, provider, key, payload, id string) sendResult {
+	endpoint := "https://api.resend.com/emails"
+	idempotencyKey := "civault/" + id
+	switch provider {
+	case "resend":
+	case "agentmail":
+		var body emailPayload
+		if json.Unmarshal([]byte(payload), &body) != nil || body.From == "" {
+			return sendResult{Code: "invalid_request"}
+		}
+		endpoint = "https://api.agentmail.to/v0/inboxes/" + url.PathEscape(body.From) + "/messages/send"
+		body.From = ""
+		payload = jsonText(body)
+		idempotencyKey = "civault-" + id
+	default:
+		return sendResult{Code: "invalid_provider"}
+	}
+	req, e := http.NewRequestWithContext(ctx, "POST", endpoint, strings.NewReader(payload))
 	if e != nil {
 		return sendResult{Code: "invalid_request"}
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Idempotency-Key", "civault/"+id)
+	req.Header.Set("Idempotency-Key", idempotencyKey)
 	resp, e := a.client.Do(req)
 	if e != nil {
 		return sendResult{Code: "network_error", Retry: true}
@@ -157,9 +174,16 @@ func (a *App) sendEmail(ctx context.Context, key, payload, id string) sendResult
 	defer resp.Body.Close()
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		var body struct {
-			ID string `json:"id"`
+			ID        string `json:"id"`
+			MessageID string `json:"message_id"`
 		}
-		if json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&body) != nil || body.ID == "" {
+		if json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&body) != nil {
+			return sendResult{Code: "invalid_response", Retry: true}
+		}
+		if provider == "agentmail" {
+			body.ID = body.MessageID
+		}
+		if body.ID == "" {
 			return sendResult{Code: "invalid_response", Retry: true}
 		}
 		return sendResult{ID: body.ID}
@@ -170,7 +194,7 @@ func (a *App) sendEmail(ctx context.Context, key, payload, id string) sendResult
 			Name string `json:"name"`
 		}
 		_ = json.NewDecoder(io.LimitReader(resp.Body, 65536)).Decode(&b)
-		result.Retry = b.Name == "concurrent_idempotent_requests"
+		result.Retry = provider == "agentmail" || b.Name == "concurrent_idempotent_requests"
 	}
 	if seconds, e := strconv.Atoi(resp.Header.Get("Retry-After")); e == nil && seconds > 0 {
 		result.Delay = time.Duration(seconds) * time.Second
@@ -209,7 +233,7 @@ func (a *App) ProcessNotifications(ctx context.Context) error {
 		return e
 	}
 	for _, id := range ids {
-		var payload, key string
+		var payload, key, provider string
 		var first int64
 		var attempts int
 		send := false
@@ -241,7 +265,8 @@ func (a *App) ProcessNotifications(ctx context.Context) error {
 				_, e = tx.ExecContext(ctx, "UPDATE notifications SET status='needs_attention',last_error='idempotency_window_closed' WHERE id=?", id)
 				return e
 			}
-			key, e = a.configSecret(ctx, tx, "resend_key")
+			provider = s.emailProvider()
+			key, e = a.configSecret(ctx, tx, s.emailSecretName())
 			if e != nil {
 				return e
 			}
@@ -256,7 +281,7 @@ func (a *App) ProcessNotifications(ctx context.Context) error {
 		if !send {
 			continue
 		}
-		result := a.sendEmail(ctx, key, payload, id)
+		result := a.sendEmail(ctx, provider, key, payload, id)
 		status := "sent"
 		var sent any = a.now().Unix()
 		next := a.now().Unix()
@@ -310,9 +335,9 @@ func (a *App) testEmail(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	if !s.ResendEnabled {
-		return bad("configure and enable Resend first")
+		return bad("configure and enable email notifications first")
 	}
-	key, e := a.configSecret(r.Context(), a.db, "resend_key")
+	key, e := a.configSecret(r.Context(), a.db, s.emailSecretName())
 	if e != nil {
 		return e
 	}
@@ -320,7 +345,7 @@ func (a *App) testEmail(w http.ResponseWriter, r *http.Request) error {
 	if e = a.audit(r.Context(), a.db, "notification.test_requested", "allow", "", map[string]string{"id": id}); e != nil {
 		return e
 	}
-	result := a.sendEmail(r.Context(), key, jsonText(emailPayload{From: s.ResendFrom, To: []string{s.OwnerEmail}, Subject: "[CIVault] 通知配置测试", Text: "Resend 已连接。此邮件不包含任何密钥。"}), id)
+	result := a.sendEmail(r.Context(), s.emailProvider(), key, jsonText(emailPayload{From: s.emailSender(), To: []string{s.OwnerEmail}, Subject: "[CIVault] 通知配置测试", Text: "邮件服务已连接。此邮件不包含任何密钥。"}), id)
 	decision := "allow"
 	if result.ID == "" {
 		decision = "deny"

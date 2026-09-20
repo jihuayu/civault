@@ -14,7 +14,7 @@ flowchart LR
     Worker --> DB
   end
   Master[固定主密钥环境变量] --> Server
-  Worker -->|固定正文 + 幂等键| Resend
+  Worker -->|固定正文 + 幂等键| Email[Resend / AgentMail]
   Server -->|固定官方地址| JWKS[GitHub JWKS]
 ```
 

@@ -29,7 +29,17 @@ const fields = {
   owner_email: { type: "string", format: "email" },
   github_enabled: boolean,
   github_client_id: str(),
-  resend_enabled: boolean,
+  email_provider: {
+    type: "string",
+    enum: ["resend", "agentmail"],
+    default: "resend",
+  },
+  agentmail_inbox_id: str("Existing AgentMail inbox ID."),
+  resend_enabled: {
+    ...boolean,
+    description:
+      "Email notifications enabled for the selected provider; legacy field name retained for compatibility.",
+  },
   resend_from: str("Verified Resend sender."),
   reminder_days: {
     type: "array",
@@ -84,6 +94,7 @@ const schemas = {
     revision: integer,
     github_secret_configured: boolean,
     resend_key_configured: boolean,
+    agentmail_key_configured: boolean,
     github_id: str(),
   }),
   SettingsUpdate: object(
@@ -97,8 +108,15 @@ const schemas = {
       resend_key: { ...str("Omit to preserve."), writeOnly: true },
       clear_github_secret: boolean,
       clear_resend_key: boolean,
+      agentmail_key: { ...str("Omit to preserve."), writeOnly: true },
+      clear_agentmail_key: boolean,
     },
-    [...Object.keys(fields), "revision"],
+    [
+      ...Object.keys(fields).filter(
+        (key) => !["email_provider", "agentmail_inbox_id"].includes(key),
+      ),
+      "revision",
+    ],
   ),
   PasswordChange: object({
     current_password: { ...str(), writeOnly: true },
