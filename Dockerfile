@@ -23,8 +23,5 @@ COPY docs/THIRD_PARTY_*_NOTICES.txt /usr/share/licenses/civault/
 COPY LICENSE /usr/share/licenses/civault/LICENSE
 USER 10001:10001
 WORKDIR /data
-VOLUME ["/data"]
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
 ENTRYPOINT ["civault-server"]

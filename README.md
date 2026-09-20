@@ -45,6 +45,8 @@
 
 默认仅将容器 8080 映射到宿主机 loopback，数据库保存在命名卷 `civault-data` 的 `/data/civault.db`。容器以 UID/GID `10001` 运行，根文件系统只读。若使用宿主机目录代替命名卷，需要赋予该 UID 数据目录的读写权限。
 
+`Dockerfile` 只负责构建可运行镜像，不声明数据卷或镜像级健康检查。本地运行时由 `compose.yaml` 挂载 `/data` 并检查 `/healthz`；部署到 Railway 等平台时，应由平台单独将持久卷挂载到 `/data`，并把 HTTP Healthcheck Path 设置为 `/healthz`。Railway 的持久卷默认以 root 挂载，因此还需要为服务设置 `RAILWAY_RUN_UID=0`。
+
 初始化后文件失效并删除，`POST /v1/setup` 返回 409；重启不会再次开放入口。主密钥缺失、长度不正确或与现有数据库不匹配时，进程退出并返回非零状态。**恢复数据库必须使用原来的主密钥。**
 
 ## 控制台
