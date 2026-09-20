@@ -1,0 +1,2926 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "CIVault API",
+    "version": "1.0.0",
+    "description": "Single Owner CI Secrets Manager. JSON requests <=64 KiB; timestamps in responses use Unix seconds, inputs use RFC3339. Responses are no-store. Management APIs never return Key plaintext or configured provider credentials. Unpaginated resource lists suit a single-owner instance."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Same origin as the console."
+    }
+  ],
+  "security": [
+    {
+      "AdminToken": []
+    },
+    {
+      "OwnerSession": []
+    }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "summary": "SQLite health",
+        "operationId": "get_healthz",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "summary": "Initialization and public login availability",
+        "operationId": "get_v1_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/setup": {
+      "post": {
+        "summary": "One-time setup; permanently closes after initialization",
+        "operationId": "post_v1_setup",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "initialized": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "initialized"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Setup"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "summary": "Password login; 5 attempts/IP/minute",
+        "operationId": "post_v1_auth_login",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/me": {
+      "get": {
+        "summary": "Current Owner and CSRF token",
+        "operationId": "get_v1_auth_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "summary": "Delete current web session",
+        "operationId": "post_v1_auth_logout",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/github": {
+      "get": {
+        "summary": "Start GitHub Authorization Code flow with state and PKCE",
+        "operationId": "get_v1_auth_github",
+        "parameters": [],
+        "responses": {
+          "302": {
+            "description": "Redirects to GitHub. Sets browser-bound OAuth cookie."
+          },
+          "default": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/auth/github/callback": {
+      "get": {
+        "summary": "Consume OAuth code and log in/bind verified Owner",
+        "operationId": "get_v1_auth_github_callback",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Session created; redirects to console."
+          },
+          "default": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/v1/admin/settings": {
+      "get": {
+        "summary": "Current configuration; sensitive fields return only configured flags",
+        "operationId": "get_v1_admin_settings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Atomically replace settings; revision conflict returns 409",
+        "operationId": "put_v1_admin_settings",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Settings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsUpdate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/password": {
+      "post": {
+        "summary": "Change password and revoke ALL sessions and admin tokens",
+        "operationId": "post_v1_admin_password",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/github-binding": {
+      "delete": {
+        "summary": "Unlink bound GitHub ID using local password",
+        "operationId": "delete_v1_admin_github_binding",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Password"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces": {
+      "get": {
+        "summary": "List workspaces",
+        "operationId": "get_v1_admin_workspaces",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Workspace"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create workspace",
+        "operationId": "post_v1_admin_workspaces",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Workspace"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Name"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/keys": {
+      "get": {
+        "summary": "List key metadata (never values)",
+        "operationId": "get_v1_admin_workspaces__ws__keys",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Key"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create key or append and activate an immutable encrypted version",
+        "operationId": "post_v1_admin_workspaces__ws__keys",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Optional. Scoped to actor and workspace for 24h. Same key/body replays metadata response; changed body returns 409. Keep the same key when retrying a write."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyWriteResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyWrite"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/keys/{key}": {
+      "patch": {
+        "summary": "Enable/disable a key and cancel obsolete notifications",
+        "operationId": "patch_v1_admin_workspaces__ws__keys__key_",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/State"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft-delete a key; no further issuance",
+        "operationId": "delete_v1_admin_workspaces__ws__keys__key_",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/keys/{key}/tags": {
+      "put": {
+        "summary": "Replace all tags; live OR authorization applies immediately",
+        "operationId": "put_v1_admin_workspaces__ws__keys__key__tags",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyTags"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/keys/{key}/versions": {
+      "get": {
+        "summary": "List version metadata; ciphertext and plaintext omitted",
+        "operationId": "get_v1_admin_workspaces__ws__keys__key__versions",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Version"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/keys/{key}/versions/{version}/activate": {
+      "post": {
+        "summary": "Activate/roll back to a nonexpired version",
+        "operationId": "post_v1_admin_workspaces__ws__keys__key__versions__version__activate",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/keys/{key}/versions/{version}": {
+      "patch": {
+        "summary": "Change lifecycle metadata, never ciphertext",
+        "operationId": "patch_v1_admin_workspaces__ws__keys__key__versions__version_",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Expiry"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/tags": {
+      "get": {
+        "summary": "List tags",
+        "operationId": "get_v1_admin_workspaces__ws__tags",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Tag"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a stable tag ID",
+        "operationId": "post_v1_admin_workspaces__ws__tags",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Name"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/tags/{tag}": {
+      "patch": {
+        "summary": "Rename without changing policy targets",
+        "operationId": "patch_v1_admin_workspaces__ws__tags__tag_",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tag"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Name"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete unused tag; any historical rule reference blocks deletion",
+        "operationId": "delete_v1_admin_workspaces__ws__tags__tag_",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tag",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/policies": {
+      "get": {
+        "summary": "List active policy revisions",
+        "operationId": "get_v1_admin_workspaces__ws__policies",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Policy"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create policy or append immutable revision by name",
+        "operationId": "post_v1_admin_workspaces__ws__policies",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/policies/{policy}": {
+      "patch": {
+        "summary": "Enable/disable policy",
+        "operationId": "patch_v1_admin_workspaces__ws__policies__policy_",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "policy",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/State"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/policies/{policy}/versions": {
+      "get": {
+        "summary": "List immutable policy versions",
+        "operationId": "get_v1_admin_workspaces__ws__policies__policy__versions",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "policy",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyVersion"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/workspaces/{ws}/policy-preview": {
+      "post": {
+        "summary": "Preview current key coverage by a rule target",
+        "operationId": "post_v1_admin_workspaces__ws__policy_preview",
+        "parameters": [
+          {
+            "name": "ws",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Key"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Rule"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/tokens": {
+      "get": {
+        "summary": "List token metadata; no plaintext/digests",
+        "operationId": "get_v1_admin_tokens",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Token"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create one-time displayed Owner management token",
+        "operationId": "post_v1_admin_tokens",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenCreated"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/tokens/{token}": {
+      "delete": {
+        "summary": "Revoke management token immediately",
+        "operationId": "delete_v1_admin_tokens__token_",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OK"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/audit-events": {
+      "get": {
+        "summary": "Query/filter/export audit events",
+        "operationId": "get_v1_admin_audit_events",
+        "parameters": [
+          {
+            "name": "decision",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "event",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "workspace_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "repository_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "request_id",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Audit"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/notifications": {
+      "get": {
+        "summary": "View durable notification outcomes; unknown sends are never automatically replayed",
+        "operationId": "get_v1_admin_notifications",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000,
+              "default": 100
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1000000,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Notification"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/admin/notifications/test": {
+      "post": {
+        "summary": "Send test email to saved Owner address; 3/IP/minute",
+        "operationId": "post_v1_admin_notifications_test",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Required for cookie authentication; omitted for Bearer admin token."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestEmailResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/runtime/github-actions/resolve": {
+      "post": {
+        "summary": "Resolve explicit references atomically, using live GitHub workload authorization",
+        "operationId": "post_v1_runtime_github_actions_resolve",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resolved"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "GithubOIDC": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Resolve"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "summary": "This OpenAPI document",
+        "operationId": "get_openapi_json",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "400 invalid request, 401 authentication required, 403 denied, 404 not found, 409 conflict, 429 rate limited, or 500 unavailable; no partial secret results.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OK": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "request_id"
+        ]
+      },
+      "Status": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "initialized": {
+            "type": "boolean"
+          },
+          "github_enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "initialized",
+          "github_enabled"
+        ]
+      },
+      "Setup": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "One-time code read from /data/setup-token.",
+            "writeOnly": true
+          },
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 256,
+            "writeOnly": true
+          },
+          "public_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "email",
+          "password",
+          "public_url"
+        ]
+      },
+      "Login": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "LoginResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string",
+            "description": "Send X-CSRF-Token on cookie-authenticated mutations."
+          }
+        },
+        "required": [
+          "email",
+          "csrf_token"
+        ]
+      },
+      "Session": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "github_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "csrf_token",
+          "github_id"
+        ]
+      },
+      "Settings": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "description": "HTTPS origin; HTTP only on localhost, 127.0.0.1 or ::1."
+          },
+          "owner_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "github_enabled": {
+            "type": "boolean"
+          },
+          "github_client_id": {
+            "type": "string"
+          },
+          "resend_enabled": {
+            "type": "boolean"
+          },
+          "resend_from": {
+            "type": "string",
+            "description": "Verified Resend sender."
+          },
+          "reminder_days": {
+            "type": "array",
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            "default": [
+              7,
+              3,
+              1
+            ]
+          },
+          "notify_on_expiry": {
+            "type": "boolean",
+            "default": true
+          },
+          "log_level": {
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ]
+          },
+          "audit_retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650,
+            "default": 180
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "github_secret_configured": {
+            "type": "boolean"
+          },
+          "resend_key_configured": {
+            "type": "boolean"
+          },
+          "github_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "public_url",
+          "owner_email",
+          "github_enabled",
+          "github_client_id",
+          "resend_enabled",
+          "resend_from",
+          "reminder_days",
+          "notify_on_expiry",
+          "log_level",
+          "audit_retention_days",
+          "revision",
+          "github_secret_configured",
+          "resend_key_configured",
+          "github_id"
+        ]
+      },
+      "SettingsUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "description": "HTTPS origin; HTTP only on localhost, 127.0.0.1 or ::1."
+          },
+          "owner_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "github_enabled": {
+            "type": "boolean"
+          },
+          "github_client_id": {
+            "type": "string"
+          },
+          "resend_enabled": {
+            "type": "boolean"
+          },
+          "resend_from": {
+            "type": "string",
+            "description": "Verified Resend sender."
+          },
+          "reminder_days": {
+            "type": "array",
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365
+            },
+            "default": [
+              7,
+              3,
+              1
+            ]
+          },
+          "notify_on_expiry": {
+            "type": "boolean",
+            "default": true
+          },
+          "log_level": {
+            "enum": [
+              "debug",
+              "info",
+              "warn",
+              "error"
+            ]
+          },
+          "audit_retention_days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3650,
+            "default": 180
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "github_secret": {
+            "type": "string",
+            "description": "Omit to preserve. Empty/masked replacements are rejected.",
+            "writeOnly": true
+          },
+          "resend_key": {
+            "type": "string",
+            "description": "Omit to preserve.",
+            "writeOnly": true
+          },
+          "clear_github_secret": {
+            "type": "boolean"
+          },
+          "clear_resend_key": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "public_url",
+          "owner_email",
+          "github_enabled",
+          "github_client_id",
+          "resend_enabled",
+          "resend_from",
+          "reminder_days",
+          "notify_on_expiry",
+          "log_level",
+          "audit_retention_days",
+          "revision"
+        ]
+      },
+      "PasswordChange": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "writeOnly": true
+          },
+          "new_password": {
+            "type": "string",
+            "description": "Revokes all web sessions and admin tokens.",
+            "minLength": 12,
+            "maxLength": 256,
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ]
+      },
+      "Password": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ]
+      },
+      "Name": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "Workspace": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "Tag": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "Key": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "active_version_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tag"
+            }
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Unix seconds, UTC; null means no expiry."
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "path",
+          "active_version_id",
+          "disabled",
+          "created_at",
+          "tags",
+          "expires_at",
+          "version"
+        ]
+      },
+      "KeyWrite": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Unique slash-separated path, <=200 UTF-8 bytes. Deleted paths cannot be reused."
+          },
+          "value": {
+            "type": "string",
+            "description": "1–32768 UTF-8 bytes; no NUL. Whitespace is preserved. Never returned to admin callers.",
+            "writeOnly": true
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "RFC3339 timestamp or explicit null to clear expiry."
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ]
+      },
+      "KeyWriteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version_id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version_id",
+          "number",
+          "path"
+        ]
+      },
+      "State": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "disabled"
+        ]
+      },
+      "KeyTags": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "tag_ids"
+        ]
+      },
+      "Version": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "integer"
+          },
+          "expires_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Unix seconds, UTC; null means no expiry."
+          },
+          "expiry_revision": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "active": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "expires_at",
+          "expiry_revision",
+          "created_at",
+          "active"
+        ]
+      },
+      "Expiry": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "RFC3339 timestamp or explicit null to clear expiry."
+          }
+        },
+        "required": [
+          "expires_at"
+        ]
+      },
+      "Rule": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "tag_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "repository_owner_id": {
+            "type": "string",
+            "pattern": "^[0-9]+$"
+          },
+          "repository_id": {
+            "type": "string",
+            "pattern": "^([0-9]+)?$"
+          },
+          "workflow_path": {
+            "type": "string",
+            "description": "Exact .github/workflows/name.yml or .yaml, requires repository_id. Checks workflow_ref, not job_workflow_ref or a uses step."
+          },
+          "workflow_sha": {
+            "type": "string",
+            "pattern": "^([0-9a-fA-F]{40})?$"
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Exact value; no wildcards. Empty array means unrestricted."
+            },
+            "uniqueItems": true
+          },
+          "environments": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Exact value; no wildcards. Empty array means unrestricted."
+            },
+            "uniqueItems": true
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "Exact value; no wildcards. Empty array means unrestricted."
+            },
+            "uniqueItems": true
+          },
+          "runner_environments": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "github-hosted",
+                "self-hosted"
+              ]
+            },
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "repository_owner_id"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "key_ids"
+            ],
+            "properties": {
+              "tag_ids": false
+            }
+          },
+          {
+            "required": [
+              "tag_ids"
+            ],
+            "properties": {
+              "key_ids": false
+            }
+          }
+        ],
+        "description": "Exactly one target selector. Tag IDs match ANY current tag. Target and every nonempty workload condition are AND; values and complete policies are OR. No override/deny rules."
+      },
+      "PolicyInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/Rule"
+          }
+        },
+        "required": [
+          "name",
+          "rule"
+        ]
+      },
+      "Policy": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "rule": {
+            "$ref": "#/components/schemas/Rule"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "disabled",
+          "rule"
+        ]
+      },
+      "PolicyResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ]
+      },
+      "PolicyVersion": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "type": "integer"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/Rule"
+          },
+          "created_at": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "spec",
+          "created_at"
+        ]
+      },
+      "TokenInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 365,
+            "default": 30
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "Token": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "expires_at": {
+            "type": "integer"
+          },
+          "revoked": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "created_at",
+          "expires_at",
+          "revoked"
+        ]
+      },
+      "TokenCreated": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "description": "Shown once; only its SHA-256 digest is stored."
+          },
+          "expires_at": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "token",
+          "expires_at"
+        ]
+      },
+      "Audit": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "allow",
+              "deny"
+            ]
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "details": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "request_id",
+          "actor",
+          "event",
+          "decision",
+          "workspace_id",
+          "details"
+        ]
+      },
+      "Notification": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "workspace_id": {
+            "type": "string"
+          },
+          "version_id": {
+            "type": "string"
+          },
+          "expiry_revision": {
+            "type": "integer"
+          },
+          "threshold": {
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sending",
+              "retry",
+              "sent",
+              "cancelled",
+              "failed",
+              "needs_attention"
+            ]
+          },
+          "attempts": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "integer"
+          },
+          "sent_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Unix seconds, UTC; null means no expiry."
+          },
+          "provider_id": {
+            "type": "string"
+          },
+          "last_error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path",
+          "workspace_id",
+          "version_id",
+          "expiry_revision",
+          "threshold",
+          "status",
+          "attempts",
+          "created_at",
+          "sent_at",
+          "provider_id",
+          "last_error"
+        ]
+      },
+      "TestEmailResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "provider_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id"
+        ]
+      },
+      "Resolve": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "workspace_id": {
+            "type": "string"
+          },
+          "references": {
+            "type": "object",
+            "minProperties": 1,
+            "maxProperties": 32,
+            "additionalProperties": {
+              "type": "string",
+              "description": "cv://<workspace_id>/<key-path>; all references must belong to workspace_id. Percent-encode path segments. Case-colliding and reserved names are rejected."
+            }
+          }
+        },
+        "required": [
+          "workspace_id",
+          "references"
+        ]
+      },
+      "Resolved": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "description": "Plaintext UTF-8 value. All requested keys succeed atomically or none are returned."
+            }
+          }
+        },
+        "required": [
+          "request_id",
+          "values"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "AdminToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Owner admin token (30 days by default); not a GitHub token."
+      },
+      "OwnerSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "civault_session",
+        "description": "8 hours. HttpOnly, SameSite=Lax, Secure on HTTPS. Mutation requires X-CSRF-Token from login/me and same-origin Origin when present."
+      },
+      "GithubOIDC": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "GitHub issuer, RS256, official JWKS. Single audience urn:civault:workspace:<workspace_id>. Same JWT can deliver the identical request at most 3 times within 60 seconds; retries pin initial versions and recheck live permissions, tags, expiry and key state."
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+name: CIVault Exec
+description: Inject OIDC-authorized keys only into a child command
+inputs:
+  server:
+    description: CIVault HTTPS origin
+    required: true
+  workspace:
+    description: Workspace ID matching every cv:// reference
+    required: true
+  command:
+    description: Command executed with keys in its environment
+    required: true
+  shell:
+    description: bash or pwsh (defaults to platform shell)
+    required: false
+  working-directory:
+    description: Child process working directory
+    required: false
+runs:
+  using: node24
+  main: ../action/dist/exec.cjs

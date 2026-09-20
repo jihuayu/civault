@@ -1,0 +1,27 @@
+services:
+  civault:
+    build: .
+    image: civault:local
+    restart: unless-stopped
+    environment:
+      CIVAULT_MASTER_KEY: ${CIVAULT_MASTER_KEY:?Generate and retain a Base64-encoded 32-byte master key}
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - civault-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  civault-data:

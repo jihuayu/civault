@@ -1,0 +1,66 @@
+name: Real GitHub OIDC acceptance
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  oidc:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - name: Build test server
+        shell: bash
+        run: |
+          mkdir -p bin
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=.exe; else suffix=; fi
+          go build -o "bin/civault-server$suffix" ./cmd/civault-server
+      - run: node scripts/oidc-setup.mjs
+        env:
+          OWNER_ID: ${{ github.repository_owner_id }}
+          REPO_ID: ${{ github.repository_id }}
+      - name: Load via real GitHub OIDC
+        id: keys
+        uses: ./
+        with:
+          server: ${{ env.CIVAULT_SMOKE_SERVER }}
+          workspace: ws_default
+          export-env: true
+        env:
+          TEST_SECRET: cv://ws_default/smoke/token
+      - name: Verify outputs and exported multiline value
+        shell: bash
+        run: |
+          node -e 'const assert = require("node:assert/strict"); assert.equal(JSON.parse(process.env.OUTPUT_JSON).TEST_SECRET, process.env.TEST_SECRET); assert.equal(process.env.TEST_SECRET, "civault-smoke\nsecond line % : 🥇");'
+        env:
+          OUTPUT_JSON: ${{ toJSON(steps.keys.outputs) }}
+      - name: Execute with real GitHub OIDC
+        uses: ./exec
+        with:
+          server: ${{ env.CIVAULT_SMOKE_SERVER }}
+          workspace: ws_default
+          command: node -e 'if (!process.env.EXEC_SECRET?.startsWith("civault-smoke")) process.exit(1)'
+        env:
+          EXEC_SECRET: cv://ws_default/smoke/token
+      - name: Verify exec scope
+        shell: bash
+        run: node -e 'if (process.env.EXEC_SECRET) process.exit(1)'
+      - name: Stop synthetic service
+        if: always()
+        run: node -e "try { process.kill(Number(require('node:fs').readFileSync('.dev/oidc/pid', 'utf8'))); } catch {}"

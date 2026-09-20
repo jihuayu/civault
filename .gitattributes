@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.png binary
+*.ico binary
+# Bundled upstream code and license notices preserve their original whitespace.
+action/dist/*.cjs -whitespace
+docs/THIRD_PARTY_*_NOTICES.txt -whitespace

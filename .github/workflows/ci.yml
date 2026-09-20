@@ -1,0 +1,66 @@
+name: Verify
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            action/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: node scripts/openapi.mjs --check
+      - run: go vet ./...
+      - run: go test ./... -count=1
+      - run: npm ci
+        working-directory: action
+      - run: npm run typecheck
+        working-directory: action
+      - run: npm run build
+        working-directory: action
+      - run: npm test
+        working-directory: action
+      - run: git diff --exit-code -- action/dist
+      - run: node scripts/notices.mjs
+      - run: git diff --exit-code -- docs/THIRD_PARTY_ACTION_NOTICES.txt docs/THIRD_PARTY_WEB_NOTICES.txt
+      - name: Race detector
+        if: runner.os == 'Linux'
+        run: go test -race ./internal/...
+      - name: Build browser-test server
+        if: runner.os == 'Linux'
+        run: go build -o bin/civault-server ./cmd/civault-server
+      - name: Install Chromium
+        if: runner.os == 'Linux'
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+      - name: Test production console with real API
+        if: runner.os == 'Linux'
+        run: npm run test:e2e
+        working-directory: web
+      - name: Build Docker image
+        if: runner.os == 'Linux'
+        run: docker build -t civault:ci .
+      - name: Test container persistence and backup
+        if: runner.os == 'Linux'
+        run: node scripts/docker-smoke.mjs

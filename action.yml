@@ -1,0 +1,19 @@
+name: CIVault Load Keys
+description: Load explicitly referenced CI keys using GitHub Actions OIDC
+branding:
+  icon: lock
+  color: green
+inputs:
+  server:
+    description: CIVault HTTPS origin
+    required: true
+  workspace:
+    description: Workspace ID matching every cv:// reference
+    required: true
+  export-env:
+    description: Also export keys to subsequent steps through GITHUB_ENV
+    default: "false"
+runs:
+  using: node24
+  main: action/dist/load.cjs
+# Outputs are dynamic: each referenced environment variable becomes a Step Output.

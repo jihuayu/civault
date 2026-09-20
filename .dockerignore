@@ -1,0 +1,14 @@
+.git
+.dev
+.uv
+.tools
+.env
+.env.*
+data
+bin
+**/node_modules
+**/test-results
+**/playwright-report
+web/dist
+*.db*
+*.exe

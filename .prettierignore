@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+.dev
+.uv
+bin
+docs/openapi.json
+**/package-lock.json

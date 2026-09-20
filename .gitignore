@@ -1,0 +1,16 @@
+.env
+/data/
+/.dev/
+/.tools/
+/.uv/
+/bin/
+**/node_modules/
+web/dist/
+web/playwright-report/
+web/test-results/
+*.db
+*.db-shm
+*.db-wal
+*.exe
+coverage.out
+*.tsbuildinfo
