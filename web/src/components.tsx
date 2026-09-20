@@ -30,7 +30,6 @@ export function PageTitle({
   return (
     <div className="page-title">
       <div>
-        <p className="eyebrow">WORKSPACE / CIVault</p>
         <h1>{title}</h1>
         <p className="muted">{caption}</p>
       </div>
@@ -55,12 +54,20 @@ export function Field({
     </label>
   );
 }
-export function Empty({ text, action }: { text: string; action?: ReactNode }) {
+export function Empty({
+  text,
+  action,
+  description = "创建后，资源会显示在这里。",
+}: {
+  text: string;
+  action?: ReactNode;
+  description?: string;
+}) {
   return (
     <div className="empty">
       <KeyRound size={32} />
       <h3>{text}</h3>
-      <p>从创建资源开始，让 CI 按授权读取所需密钥。</p>
+      <p>{description}</p>
       {action}
     </div>
   );
@@ -105,11 +112,13 @@ export function AsyncForm({
   children,
   label = "保存",
   onCancel,
+  destructive = false,
 }: {
   submit: () => Promise<void>;
   children: ReactNode;
   label?: string;
   onCancel?: () => void;
+  destructive?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -136,7 +145,12 @@ export function AsyncForm({
               取消
             </button>
           ) : null}
-          <button type="submit">{busy ? "处理中…" : label}</button>
+          <button
+            type="submit"
+            className={destructive ? "danger-button" : undefined}
+          >
+            {busy ? "处理中…" : label}
+          </button>
         </div>
       </fieldset>
     </form>
@@ -151,10 +165,16 @@ export function CopyButton({
 }) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
   return (
     <button
       type="button"
       className="secondary small"
+      aria-live="polite"
       onClick={async () => {
         try {
           await navigator.clipboard.writeText(text);

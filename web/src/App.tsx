@@ -13,6 +13,7 @@ import {
   Tag as TagIcon,
   Terminal,
   Menu,
+  X,
 } from "lucide-react";
 import { api, setCSRF, useData, type Workspace } from "./api";
 import {
@@ -41,6 +42,10 @@ const nav = [
   { id: "tokens", label: "CLI 令牌", icon: Terminal },
   { id: "settings", label: "系统设置", icon: Settings2 },
 ];
+const currentPage = () =>
+  nav.some((item) => item.id === location.hash.slice(1))
+    ? location.hash.slice(1)
+    : "keys";
 
 export default function App() {
   const [status, setStatus] = useState<{
@@ -142,7 +147,7 @@ function Auth({
   return (
     <main className="auth-page">
       <div className="auth-brand">
-        <ShieldCheck size={30} />
+        <img className="brand-logo" src="/logo.png" alt="" width={40} height={40} />
         <span>CIVault</span>
       </div>
       <div className="auth-card">
@@ -250,65 +255,90 @@ function Dashboard({
   const [ws, setWS] = useState(
     () => localStorage.getItem("civault.workspace") || "ws_default",
   );
-  const [page, setPage] = useState(() => location.hash.slice(1) || "keys");
+  const [page, setPage] = useState(currentPage);
   const [create, setCreate] = useState(false);
   const [name, setName] = useState("");
   const [menu, setMenu] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => {
     const h = () => {
-      setPage(location.hash.slice(1) || "keys");
+      setPage(currentPage());
       setMenu(false);
     };
     window.addEventListener("hashchange", h);
     return () => window.removeEventListener("hashchange", h);
+  }, []);
+  useEffect(() => {
+    document.title = `${nav.find((item) => item.id === page)?.label} · CIVault`;
+  }, [page]);
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenu(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
   }, []);
   const selected = spaces.data?.some((x) => x.id === ws)
     ? ws
     : spaces.data?.[0]?.id || "ws_default";
   return (
     <div className="app-shell">
-      <aside className={menu ? "sidebar open" : "sidebar"}>
-        <a className="brand" href="#keys">
-          <span className="brand-mark">
-            <ShieldCheck size={22} />
-          </span>
-          <strong>CIVault</strong>
-          <span className="version-pill">v1</span>
-        </a>
-        <div className="sidebar-label">密钥管理</div>
-        <nav>
+      <a className="skip-link" href="#main-content">
+        跳到主要内容
+      </a>
+      {menu ? (
+        <button
+          className="nav-backdrop"
+          aria-label="关闭导航"
+          onClick={() => setMenu(false)}
+        />
+      ) : null}
+      <aside id="main-navigation" className={menu ? "sidebar open" : "sidebar"}>
+        <nav aria-label="主导航">
           {nav.map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
               aria-current={page === item.id ? "page" : undefined}
               className={page === item.id ? "nav-link active" : "nav-link"}
+              onClick={() => setMenu(false)}
             >
               <item.icon size={18} />
               {item.label}
             </a>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <div className="status-dot" />
-          <span>GitHub OIDC 身份验证</span>
-          <small>无 CI 长期访问凭证</small>
-        </div>
       </aside>
       <div className="main-shell">
         <header className="topbar">
           <button
             className="icon-button mobile-menu"
             aria-label="导航菜单"
+            aria-expanded={menu}
+            aria-controls="main-navigation"
             onClick={() => setMenu(!menu)}
           >
-            <Menu size={20} />
+            {menu ? <X size={20} /> : <Menu size={20} />}
           </button>
           <div className="workspace-switch">
+            <a className="brand" href="#keys" aria-label="CIVault 首页">
+              <span className="brand-mark">
+                <img className="brand-logo" src="/logo.png" alt="" width={32} height={32} />
+              </span>
+              <strong>CIVault</strong>
+            </a>
+            <span className="breadcrumb-divider">/</span>
             <Layers size={17} />
             <select
               aria-label="工作区"
+              disabled={
+                spaces.loading || !["keys", "tags", "policies"].includes(page)
+              }
+              title={
+                ["keys", "tags", "policies"].includes(page)
+                  ? "切换工作区"
+                  : "当前页面为全局管理，不受工作区影响"
+              }
               value={selected}
               onChange={(e) => {
                 setWS(e.target.value);
@@ -342,7 +372,14 @@ function Dashboard({
             </button>
           </div>
         </header>
-        <main className="content">
+        <main id="main-content" className="content" tabIndex={-1}>
+          <div className="page-context">
+            {["keys", "tags", "policies"].includes(page)
+              ? `工作区 / ${spaces.data?.find((space) => space.id === selected)?.name || "加载中"}`
+              : "全局管理"}
+            <span>/</span>
+            {nav.find((item) => item.id === page)?.label}
+          </div>
           <ErrorBox error={error || spaces.error} />
           {page === "tags" ? (
             <TagsPage key={selected} ws={selected} />
@@ -361,7 +398,11 @@ function Dashboard({
           )}
         </main>
         <footer className="footer">
-          CIVault <span>密钥始终加密存储，访问始终经过授权。</span>
+          <strong>CIVault</strong>
+          <span>密钥加密存储 · 按工作流授权</span>
+          <span className="footer-security">
+            <ShieldCheck size={14} /> GitHub OIDC
+          </span>
         </footer>
       </div>
       {create ? (
@@ -373,7 +414,9 @@ function Dashboard({
                 name,
               });
               setWS(v.id);
+              localStorage.setItem("civault.workspace", v.id);
               spaces.reload();
+              location.hash = "keys";
               setCreate(false);
               setName("");
             }}

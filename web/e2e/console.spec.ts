@@ -181,6 +181,62 @@ test("Owner manages keys, policies, settings and tokens through the real Go serv
       (await context.request.get("/v1/admin/workspaces", { headers })).status(),
     ).toBe(401);
   });
+  await test.step("key filters, feedback and explicit deletion", async () => {
+    await page.getByRole("link", { name: "密钥", exact: true }).click();
+    await page.getByLabel("搜索密钥").fill("no-match");
+    await expect(page.getByText("没有匹配的密钥")).toBeVisible();
+    await page.getByRole("button", { name: "清除筛选" }).click();
+    await expect(
+      page.getByRole("button", { name: "shared/npm-token", exact: true }),
+    ).toBeVisible();
+    await page.getByLabel("密钥状态").selectOption("disabled");
+    await expect(page.getByText("没有匹配的密钥")).toBeVisible();
+    await page.getByRole("button", { name: "密钥总数" }).click();
+    await expect(page.getByLabel("密钥状态")).toHaveValue("all");
+    await page.getByRole("button", { name: "创建密钥", exact: true }).click();
+    await dialog.getByLabel("密钥路径").fill("test/disposable");
+    await dialog.getByLabel("密钥值").fill("synthetic-disposable-value");
+    await dialog.getByRole("button", { name: "创建密钥", exact: true }).click();
+    const row = page.getByRole("row").filter({ hasText: "test/disposable" });
+    await row.getByLabel("更多操作").click();
+    await row.getByRole("button", { name: "禁用", exact: true }).click();
+    await expect(row.getByText("已禁用", { exact: true })).toBeVisible();
+    await page.getByLabel("密钥状态").selectOption("disabled");
+    await expect(row).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "shared/npm-token", exact: true }),
+    ).toHaveCount(0);
+    await row.getByLabel("更多操作").click();
+    await row.getByRole("button", { name: "删除", exact: true }).click();
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(row).toBeVisible();
+    await row.getByLabel("更多操作").click();
+    await row.getByRole("button", { name: "删除", exact: true }).click();
+    await dialog.getByRole("button", { name: "确认删除", exact: true }).click();
+    await expect(row).toHaveCount(0);
+    await page.getByRole("button", { name: "清除筛选" }).click();
+    await page.getByRole("button", { name: "关闭提示" }).click();
+  });
+  await test.step("workspace persistence and global scope", async () => {
+    await page.getByRole("button", { name: "创建工作区" }).click();
+    await dialog.getByLabel("工作区名称").fill("Preview");
+    await dialog.getByRole("button", { name: "保存", exact: true }).click();
+    await expect(page.getByLabel("工作区", { exact: true })).not.toHaveValue(
+      "ws_default",
+    );
+    const selected = await page
+      .getByLabel("工作区", { exact: true })
+      .inputValue();
+    await page.reload();
+    await expect(page.getByLabel("工作区", { exact: true })).toHaveValue(
+      selected,
+    );
+    await page.getByRole("link", { name: "系统设置", exact: true }).click();
+    await expect(page.getByLabel("工作区", { exact: true })).toBeDisabled();
+    await expect(page.getByText("全局管理", { exact: false })).toBeVisible();
+    await page.getByRole("link", { name: "密钥", exact: true }).click();
+    await page.getByLabel("工作区", { exact: true }).selectOption("ws_default");
+  });
   await test.step("audit export, notification state, mobile navigation and logout", async () => {
     await page.getByRole("link", { name: "审计日志", exact: true }).click();
     await expect(

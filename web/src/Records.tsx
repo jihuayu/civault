@@ -177,7 +177,10 @@ export function AuditPage() {
               </tbody>
             </table>
             {!records.data?.length ? (
-              <Empty text="没有符合条件的审计记录" />
+              <Empty
+                text="没有符合条件的审计记录"
+                description="尝试调整时间范围、事件或访问决策。管理操作与工作流访问会自动记录。"
+              />
             ) : null}
           </div>
         )}
@@ -250,7 +253,10 @@ export function NotificationsPage() {
         {data.loading ? (
           <Loading />
         ) : !data.data?.length ? (
-          <Empty text="暂无到期通知" />
+          <Empty
+            text="暂无到期通知"
+            description="密钥达到提醒时间后，发送进度与结果会显示在这里。"
+          />
         ) : (
           <div className="table-scroll">
             <table>
@@ -340,7 +346,10 @@ export function TokensPage() {
         {tokens.loading ? (
           <Loading />
         ) : !tokens.data?.length ? (
-          <Empty text="还没有管理令牌" />
+          <Empty
+            text="还没有管理令牌"
+            description="创建一个令牌，让本地 CLI 安全连接你的 CIVault。"
+          />
         ) : (
           <div className="table-scroll">
             <table>

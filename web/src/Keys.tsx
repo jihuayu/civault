@@ -41,36 +41,51 @@ export function KeysPage({ ws }: { ws: string }) {
   const tags = useData<Tag[]>(wsBase(ws) + "/tags");
   const settings = useData<Settings>("/v1/admin/settings");
   const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [deleting, setDeleting] = useState<KeyItem | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
   const [editing, setEditing] = useState<KeyItem | "new" | null>(null);
   const [history, setHistory] = useState<KeyItem | null>(null);
   const [tagKey, setTagKey] = useState<KeyItem | null>(null);
   const [using, setUsing] = useState<KeyItem | null>(null);
   const [error, setError] = useState("");
   const list = keys.data || [];
-  const filtered = list.filter((k) =>
-    (k.path + " " + k.tags.map((t) => t.name).join(" "))
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
   const now = Date.now() / 1000;
+  const matchesStatus = (k: KeyItem) =>
+    filter === "all" ||
+    (filter === "active" &&
+      !k.disabled &&
+      (!k.expires_at || k.expires_at > now)) ||
+    (filter === "attention" &&
+      !k.disabled &&
+      !!k.expires_at &&
+      k.expires_at < now + 7 * 86400) ||
+    (filter === "disabled" && k.disabled);
+  const filtered = list.filter(
+    (k) =>
+      matchesStatus(k) &&
+      (k.path + " " + k.tags.map((t) => t.name).join(" "))
+        .toLowerCase()
+        .includes(search.trim().toLowerCase()),
+  );
   const expiring = list.filter(
     (k) => !k.disabled && k.expires_at && k.expires_at < now + 7 * 86400,
   ).length;
-  async function mutate(k: KeyItem, remove = false) {
-    if (
-      remove &&
-      !confirm(`删除 ${k.path}？历史版本将保留用于审计，工作流将无法继续读取。`)
-    )
-      return;
+  async function mutate(k: KeyItem) {
+    if (pending) return;
+    setPending(k.id);
+    setError("");
     try {
-      await api(
-        wsBase(ws) + "/keys/" + k.id,
-        remove ? "DELETE" : "PATCH",
-        remove ? undefined : { disabled: !k.disabled },
-      );
+      await api(wsBase(ws) + "/keys/" + k.id, "PATCH", {
+        disabled: !k.disabled,
+      });
+      setFeedback(`${k.path} 已${k.disabled ? "启用" : "禁用"}`);
       keys.reload();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setPending(null);
     }
   }
   return (
@@ -85,68 +100,139 @@ export function KeysPage({ ws }: { ws: string }) {
         </button>
       </PageTitle>
       <div className="stats">
-        <div className="stat">
+        <button
+          className="stat"
+          aria-pressed={filter === "all"}
+          onClick={() => setFilter("all")}
+        >
           <div>
             <span>密钥总数</span>
-            <strong>{list.length.toString().padStart(2, "0")}</strong>
+            <strong>{keys.loading || keys.error ? "—" : list.length}</strong>
           </div>
           <KeyRound />
-        </div>
-        <div className="stat">
+        </button>
+        <button
+          className="stat"
+          aria-pressed={filter === "active"}
+          onClick={() => setFilter("active")}
+        >
           <div>
             <span>已启用</span>
             <strong>
-              {list
-                .filter(
-                  (k) => !k.disabled && (!k.expires_at || k.expires_at > now),
-                )
-                .length.toString()
-                .padStart(2, "0")}
+              {keys.loading || keys.error
+                ? "—"
+                : list.filter(
+                    (k) => !k.disabled && (!k.expires_at || k.expires_at > now),
+                  ).length}
             </strong>
           </div>
           <ShieldCheck />
-        </div>
-        <div className="stat">
+        </button>
+        <button
+          className="stat"
+          aria-pressed={filter === "attention"}
+          onClick={() => setFilter("attention")}
+        >
           <div>
-            <span>7 天内到期 / 已到期</span>
-            <strong>{expiring.toString().padStart(2, "0")}</strong>
+            <span title="已到期或将在 7 天内到期的密钥">到期 / 即将到期</span>
+            <strong>{keys.loading || keys.error ? "—" : expiring}</strong>
           </div>
           <Clock3 />
-        </div>
+        </button>
       </div>
       <ErrorBox error={error || keys.error} />
+      {feedback ? (
+        <div className="feedback" role="status">
+          <ShieldCheck size={15} />
+          <span>{feedback}</span>
+          <button className="text-button" onClick={() => setFeedback("")}>
+            关闭提示
+          </button>
+        </div>
+      ) : null}
       <section className="panel">
         <div className="panel-toolbar">
           <div>
-            <strong>所有密钥</strong>
-            <span className="count">{list.length}</span>
+            <strong>
+              {
+                {
+                  all: "所有密钥",
+                  active: "已启用",
+                  attention: "需要关注",
+                  disabled: "已禁用",
+                }[filter]
+              }
+            </strong>
+            <span className="count">{filtered.length}</span>
           </div>
-          <label className="search">
-            <Search size={17} />
-            <input
-              aria-label="搜索密钥"
-              placeholder="搜索路径或标签…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
+          <div className="key-filters">
+            <label className="search">
+              <Search size={17} />
+              <input
+                aria-label="搜索密钥"
+                placeholder="搜索路径或标签…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <select
+              aria-label="密钥状态"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            >
+              <option value="all">全部状态</option>
+              <option value="active">已启用</option>
+              <option value="attention">到期提醒</option>
+              <option value="disabled">已禁用</option>
+            </select>
+          </div>
         </div>
         {keys.loading ? (
           <Loading />
+        ) : keys.error ? (
+          <Empty
+            text="密钥加载失败"
+            description="请检查连接后重试。"
+            action={
+              <button className="secondary" onClick={keys.reload}>
+                重新加载
+              </button>
+            }
+          />
         ) : !filtered.length ? (
           <Empty
-            text={search ? "没有匹配的密钥" : "还没有密钥"}
+            text={search || filter !== "all" ? "没有匹配的密钥" : "还没有密钥"}
+            description={
+              search || filter !== "all"
+                ? "试试其他路径、标签或状态，或清除当前筛选。"
+                : "安全保存第一份 CI 凭证，再通过授权规则连接工作流。"
+            }
             action={
-              !search ? (
+              !search && filter === "all" ? (
                 <button onClick={() => setEditing("new")}>
                   <Plus size={16} />
                   创建第一个密钥
                 </button>
-              ) : undefined
+              ) : (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setSearch("");
+                    setFilter("all");
+                  }}
+                >
+                  清除筛选
+                </button>
+              )
             }
           />
         ) : (
-          <div className="table-scroll">
+          <div
+            className="table-scroll"
+            tabIndex={0}
+            role="region"
+            aria-label="密钥列表，可横向滚动"
+          >
             <table>
               <thead>
                 <tr>
@@ -198,7 +284,7 @@ export function KeysPage({ ws }: { ws: string }) {
                     </td>
                     <td>
                       <span
-                        className={`badge ${k.disabled || (k.expires_at && k.expires_at <= now) ? "muted-badge" : k.expires_at && k.expires_at < now + 7 * 86400 ? "warning-badge" : "success-badge"}`}
+                        className={`badge ${k.disabled ? "muted-badge" : k.expires_at && k.expires_at <= now ? "danger-badge" : k.expires_at && k.expires_at < now + 7 * 86400 ? "warning-badge" : "success-badge"}`}
                       >
                         {k.disabled
                           ? "已禁用"
@@ -239,12 +325,25 @@ export function KeysPage({ ws }: { ws: string }) {
                         <details className="row-menu">
                           <summary aria-label="更多操作">···</summary>
                           <div>
-                            <button onClick={() => mutate(k)}>
+                            <button
+                              disabled={pending !== null}
+                              onClick={(event) => {
+                                event.currentTarget
+                                  .closest("details")
+                                  ?.removeAttribute("open");
+                                void mutate(k);
+                              }}
+                            >
                               {k.disabled ? "启用" : "禁用"}
                             </button>
                             <button
                               className="danger-text"
-                              onClick={() => mutate(k, true)}
+                              onClick={(event) => {
+                                event.currentTarget
+                                  .closest("details")
+                                  ?.removeAttribute("open");
+                                setDeleting(k);
+                              }}
                             >
                               删除
                             </button>
@@ -260,9 +359,35 @@ export function KeysPage({ ws }: { ws: string }) {
         )}
         <div className="panel-note">
           <ShieldCheck size={14} />
-          Key 值加密保存；只有命中授权规则的工作流才能读取。
+          <span>
+            Key 值加密保存；只有命中授权规则的工作流才能读取。
+            <span className="mobile-table-hint">左右滑动查看状态与操作 →</span>
+          </span>
         </div>
       </section>
+      {deleting ? (
+        <Modal title="删除密钥" onClose={() => setDeleting(null)}>
+          <p>
+            确定删除 <code>{deleting.path}</code>？
+          </p>
+          <Notice>
+            删除后工作流将无法继续读取此密钥。历史版本会保留用于审计。
+          </Notice>
+          <AsyncForm
+            label="确认删除"
+            destructive
+            onCancel={() => setDeleting(null)}
+            submit={async () => {
+              await api(wsBase(ws) + "/keys/" + deleting.id, "DELETE");
+              setFeedback(`${deleting.path} 已删除`);
+              setDeleting(null);
+              keys.reload();
+            }}
+          >
+            {null}
+          </AsyncForm>
+        </Modal>
+      ) : null}
       {editing ? (
         <KeyEditor
           key={editing === "new" ? "new" : editing.id}
@@ -271,6 +396,7 @@ export function KeysPage({ ws }: { ws: string }) {
           close={() => setEditing(null)}
           done={() => {
             keys.reload();
+            setFeedback(editing === "new" ? "密钥已创建" : "新版本已加密保存");
             setEditing(null);
           }}
         />
